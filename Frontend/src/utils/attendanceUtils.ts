@@ -49,13 +49,13 @@ export function calcPermissionMinutes(tagStr: string | null | undefined): number
 }
 
 /**
- * Calculates complete attendance metrics following business rules:
- * 1. Working Hours = Check Out - Check In (actual worked duration)
+ * Calculates complete attendance metrics following Option B (Permission deducts from Working Hours):
+ * 1. Working Hours = (Check Out - Check In) - Permission Overlap
  * 2. Early In = 10:00 AM - Check In (only for normal same-day shifts, 0 for overnight)
  * 3. Late In = Check In - 10:00 AM (if Check In > 10:00 AM and not covered by permission)
  * 4. Early Out = 6:30 PM - Check Out (if Check Out < 6:30 PM and not covered by permission)
  * 5. Overtime = Check Out - 6:30 PM (for normal day shifts) OR Working Hours - Required Hours (for overnight shifts)
- * 6. Permission: Removes Late In or Early Out if covering missing hours
+ * 6. Permission: Deducts from Working Hours and removes Late In / Early Out penalties.
  */
 export function getAttendanceMetrics(
   inT: string | null | undefined,
@@ -87,11 +87,29 @@ export function getAttendanceMetrics(
     outMins += 24 * 60
   }
 
-  const workingMins = outMins - inMins
+  const totalDuration = outMins - inMins
+
+  // Calculate permission overlap with the worked shift
+  const pData = parsePermissionData(work_tag)
+  let permOverlap = 0
+  if (pData) {
+    const pStart = toMinutes(pData.start)
+    let pEnd = toMinutes(pData.end)
+    if (pEnd <= pStart) pEnd += 24 * 60
+    const overlapStart = Math.max(inMins, pStart)
+    const overlapEnd = Math.min(outMins, pEnd)
+    if (overlapEnd > overlapStart) {
+      permOverlap = overlapEnd - overlapStart
+    }
+  } else if (pMins > 0) {
+    permOverlap = pMins
+  }
+
+  const workingMins = Math.max(0, totalDuration - permOverlap)
   const workingHours = workingMins / 60
 
   // Overnight / Continuous Shift Classification
-  const isOvernight = rawCrossMidnight || (inMins <= 6 * 60 && workingMins > REQUIRED_WORK_MINS)
+  const isOvernight = rawCrossMidnight || (inMins <= 6 * 60 && totalDuration > REQUIRED_WORK_MINS)
 
   if (isOvernight) {
     return {
@@ -102,7 +120,7 @@ export function getAttendanceMetrics(
       earlyInMins: 0,
       lateInMins: 0,
       earlyOutMins: 0,
-      overtimeMins: Math.max(0, Math.round(workingMins - REQUIRED_WORK_MINS)),
+      overtimeMins: Math.max(0, Math.round(workingMins - Math.max(0, REQUIRED_WORK_MINS - pMins))),
       isOvernight: true,
     }
   }
@@ -114,7 +132,6 @@ export function getAttendanceMetrics(
   let lateInMins = 0
   if (inMins > STANDARD_IN_MINS) {
     const baseLate = inMins - STANDARD_IN_MINS
-    const pData = parsePermissionData(work_tag)
     if (pData) {
       const pStart = toMinutes(pData.start)
       let pEnd = toMinutes(pData.end)
@@ -130,7 +147,6 @@ export function getAttendanceMetrics(
   let earlyOutMins = 0
   if (outMins < STANDARD_OUT_MINS) {
     const baseEarlyOut = STANDARD_OUT_MINS - outMins
-    const pData = parsePermissionData(work_tag)
     if (pData) {
       const pStart = toMinutes(pData.start)
       let pEnd = toMinutes(pData.end)

@@ -39,13 +39,13 @@ def calc_permission_minutes(tag_str: Optional[str]) -> int:
 
 def calculate_attendance(in_t: Optional[str], out_t: Optional[str], work_tag: Optional[str] = None) -> Dict[str, Any]:
     """
-    Calculate attendance metrics following exact business rules:
-    - Working Hours: Check Out - Check In
+    Calculate attendance metrics following Option B (Permission deducts from Working Hours):
+    - Working Hours = (Check Out - Check In) - Permission Overlap
     - Early In: 10:00 AM - Check In (normal same-day shift only, 0 for overnight)
     - Late In: Check In - 10:00 AM (if Check In > 10:00 AM and not covered by permission)
     - Early Out: 6:30 PM - Check Out (if Check Out < 6:30 PM and not covered by permission)
     - Overtime: Check Out - 6:30 PM (normal day shift) OR Working Hours - Required Hours (overnight shift)
-    - Permission: Removes Late In or Early Out if covering missing hours
+    - Permission: Deducts from Working Hours and removes Late In / Early Out penalties.
     """
     p_mins = calc_permission_minutes(work_tag)
     p_hrs = p_mins / 60.0
@@ -70,19 +70,34 @@ def calculate_attendance(in_t: Optional[str], out_t: Optional[str], work_tag: Op
     if raw_cross_midnight:
         out_mins += 24 * 60
 
-    working_mins = out_mins - in_mins
+    total_duration = out_mins - in_mins
+
+    # Calculate permission overlap with the worked shift
+    p_data = parse_permission_data(work_tag)
+    perm_overlap = 0
+    if p_data:
+        p_start = to_minutes(p_data["start"])
+        p_end = to_minutes(p_data["end"])
+        if p_end <= p_start:
+            p_end += 24 * 60
+        overlap_start = max(in_mins, p_start)
+        overlap_end = min(out_mins, p_end)
+        if overlap_end > overlap_start:
+            perm_overlap = overlap_end - overlap_start
+    elif p_mins > 0:
+        perm_overlap = p_mins
+
+    working_mins = max(0, total_duration - perm_overlap)
     working_hours = working_mins / 60.0
 
     # Overnight / Continuous Shift Classification
-    # 1. Raw cross midnight (e.g. check-in 10 PM, check-out 6:30 AM next day)
-    # 2. Continuous shift starting early midnight (e.g. check-in 12:01 AM) spanning into evening (> 8.5h)
-    is_overnight = raw_cross_midnight or (in_mins <= 6 * 60 and working_mins > REQUIRED_WORK_MINS)
+    is_overnight = raw_cross_midnight or (in_mins <= 6 * 60 and total_duration > REQUIRED_WORK_MINS)
 
     if is_overnight:
         early_in_mins = 0
         late_in_mins = 0
         early_out_mins = 0
-        overtime_mins = max(0, round(working_mins - REQUIRED_WORK_MINS))
+        overtime_mins = max(0, round(working_mins - max(0, REQUIRED_WORK_MINS - p_mins)))
     else:
         # 1. Early In: 10:00 AM - Check In (if Check In < 10:00 AM)
         early_in_mins = max(0, STANDARD_IN_MINS - in_mins) if in_mins < STANDARD_IN_MINS else 0
@@ -91,7 +106,6 @@ def calculate_attendance(in_t: Optional[str], out_t: Optional[str], work_tag: Op
         late_in_mins = 0
         if in_mins > STANDARD_IN_MINS:
             base_late = in_mins - STANDARD_IN_MINS
-            p_data = parse_permission_data(work_tag)
             if p_data:
                 p_start = to_minutes(p_data["start"])
                 p_end = to_minutes(p_data["end"])
@@ -106,7 +120,6 @@ def calculate_attendance(in_t: Optional[str], out_t: Optional[str], work_tag: Op
         early_out_mins = 0
         if out_mins < STANDARD_OUT_MINS:
             base_early_out = STANDARD_OUT_MINS - out_mins
-            p_data = parse_permission_data(work_tag)
             if p_data:
                 p_start = to_minutes(p_data["start"])
                 p_end = to_minutes(p_data["end"])

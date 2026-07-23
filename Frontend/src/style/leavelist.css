@@ -1,0 +1,57 @@
+/* ── Leave Filter Bar ── */
+.leave-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--white);
+  padding: 14px 18px;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  margin-bottom: 20px;
+}
+
+.date-mode-toggle {
+  display: flex;
+  border: 1.5px solid #dce1e7;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.toggle-btn {
+  padding: 7px 14px;
+  font-size: 13px;
+  border: none;
+  background: var(--white);
+  color: var(--grey-mid);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-weight: 500;
+}
+.toggle-btn.active {
+  background: var(--blue-mid);
+  color: var(--white);
+}
+
+.date-input {
+  padding: 8px 12px;
+  border: 1.5px solid #dce1e7;
+  border-radius: 8px;
+  font-size: 13px;
+  outline: none;
+  color: var(--grey-dark);
+  transition: border 0.2s;
+}
+.date-input:focus { border-color: var(--blue-accent); }
+
+.clear-btn {
+  padding: 7px 14px;
+  background: #fadbd8;
+  color: #c0392b;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.clear-btn:hover { background: #f1948a; color: #fff; }

@@ -1,0 +1,67 @@
+/* ── Department Cards ── */
+.dept-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 18px;
+}
+
+.dept-card {
+  background: var(--white);
+  border-radius: 12px;
+  padding: 22px 20px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.07);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  position: relative;
+  transition: box-shadow 0.2s, transform 0.2s;
+  border: 1.5px solid transparent;
+}
+.dept-card:hover {
+  box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+  transform: translateY(-2px);
+  border-color: var(--blue-accent);
+}
+.dept-card:hover .dept-card-actions { opacity: 1; }
+
+.dept-card-icon {
+  width: 48px;
+  height: 48px;
+  background: linear-gradient(135deg, var(--blue-mid), var(--blue-accent));
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.dept-card-info { flex: 1; }
+.dept-card-info h3 { font-size: 15px; font-weight: 700; color: var(--blue-dark); }
+.dept-card-info p  { font-size: 13px; color: var(--grey-mid); margin-top: 3px; }
+
+.dept-card-actions {
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.2s;
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+.dept-action-btn {
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+.dept-action-btn.edit   { background: #d6eaf8; color: #1a5276; }
+.dept-action-btn.edit:hover   { background: #aed6f1; }
+.dept-action-btn.delete { background: #fadbd8; color: #c0392b; }
+.dept-action-btn.delete:hover { background: #f1948a; color: #fff; }

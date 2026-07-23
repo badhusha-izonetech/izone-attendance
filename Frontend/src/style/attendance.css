@@ -1,0 +1,397 @@
+/* ── Attendance Page ── */
+.att-date-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--white);
+  padding: 8px 14px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+  border: 1.5px solid #dce1e7;
+}
+
+.att-time-input {
+  padding: 5px 8px;
+  border: 1.5px solid #dce1e7;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+  width: 110px;
+  color: var(--grey-dark);
+  transition: border 0.2s;
+}
+.att-time-input:focus { border-color: var(--blue-accent); }
+
+.att-select {
+  padding: 5px 8px;
+  border: 1.5px solid #dce1e7;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+  background: var(--white);
+  color: var(--grey-dark);
+  cursor: pointer;
+  transition: border 0.2s;
+}
+.att-select:focus { border-color: var(--blue-accent); }
+
+/* Clickable emp id / name */
+.emp-id-link {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--blue-mid);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.15s;
+}
+.emp-id-link:hover { color: var(--blue-dark); }
+
+/* Three-dot menu */
+.three-dot-btn {
+  width: 34px;
+  height: 34px;
+  border: 1.5px solid #dce1e7;
+  border-radius: 8px;
+  background: var(--white);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--grey-mid);
+  transition: all 0.15s;
+}
+.three-dot-btn:hover { background: var(--grey-light); color: var(--grey-dark); border-color: #bdc3c7; }
+
+.three-dot-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  background: var(--white);
+  border: 1.5px solid #dce1e7;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  min-width: 160px;
+  z-index: 150;
+  overflow: hidden;
+  animation: modalIn 0.15s ease;
+}
+
+.three-dot-option {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  text-align: left;
+  background: none;
+  border: none;
+  font-size: 13px;
+  color: var(--grey-dark);
+  cursor: pointer;
+  transition: background 0.12s;
+  font-weight: 500;
+}
+.three-dot-option:hover { background: #f0f4f8; }
+.three-dot-option.selected { background: #e8f4fd; color: var(--blue-mid); font-weight: 700; }
+
+/* Employee Detail Card */
+.emp-detail-card {
+  background: var(--white);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+  margin-bottom: 20px;
+  border: 1.5px solid var(--blue-accent);
+  overflow: hidden;
+  animation: modalIn 0.18s ease;
+}
+
+.emp-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, var(--blue-dark), var(--blue-mid));
+  color: var(--white);
+}
+
+.emp-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--blue-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+  border: 2px solid rgba(255,255,255,0.3);
+}
+
+.emp-detail-header h3 { font-size: 16px; font-weight: 700; color: #fff; }
+.emp-detail-header .modal-close { color: rgba(255,255,255,0.7); }
+.emp-detail-header .modal-close:hover { background: rgba(255,255,255,0.15); color: #fff; }
+
+.emp-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0;
+  padding: 4px 0;
+}
+
+.emp-detail-grid > div {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--grey-light);
+  border-right: 1px solid var(--grey-light);
+}
+.emp-detail-grid > div:last-child { border-bottom: none; }
+
+.emp-detail-grid span {
+  display: block;
+  font-size: 11px;
+  color: var(--grey-mid);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+.emp-detail-grid strong {
+  font-size: 13px;
+  color: var(--grey-dark);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+/* work tag badges */
+.badge-earlycome { background: #d5f5e3; color: #1e8449; }
+
+/* ── Leave badge ── */
+.badge-leave { background: #e8daef; color: #6c3483; }
+
+/* ── Attendance status select color variants ── */
+.att-select-present { border-color: #27ae60 !important; color: #1e8449; }
+.att-select-absent  { border-color: #e74c3c !important; color: #c0392b; }
+.att-select-halfday { border-color: #f39c12 !important; color: #d68910; }
+.att-select-leave   { border-color: #e74c3c !important; color: #c0392b; }
+.att-select-holiday { border-color: #8e44ad !important; color: #8e44ad; }
+.att-select-weekendworking { border-color: #117a65 !important; color: #117a65; }
+
+/* ── Leave dash ── */
+.att-leave-dash {
+  color: #bdc3c7;
+  font-size: 15px;
+  font-weight: 600;
+  display: inline-block;
+  padding: 0 4px;
+}
+
+/* ── More button ── */
+.more-btn {
+  min-width: 36px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1.5px solid #dce1e7;
+  border-radius: 7px;
+  background: var(--white);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--grey-mid);
+  font-size: 14px;
+  font-weight: 700;
+  transition: all 0.15s;
+  gap: 4px;
+}
+.more-btn:hover          { background: var(--grey-light); border-color: var(--blue-accent); color: var(--blue-mid); }
+.more-btn.active         { background: #eef2ff; border-color: var(--blue-mid); color: var(--blue-mid); }
+
+/* ── More popup ── */
+.more-popup {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  background: var(--white);
+  border: 1.5px solid #dce1e7;
+  border-radius: 12px;
+  box-shadow: 0 10px 32px rgba(0,0,0,0.14);
+  min-width: 230px;
+  z-index: 200;
+  overflow: hidden;
+  animation: modalIn 0.15s ease;
+}
+
+.more-popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid var(--grey-light);
+  background: #f8fafc;
+}
+
+.more-popup-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--blue-dark);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.more-popup-times {
+  display: flex;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--grey-mid);
+}
+.more-popup-times strong { color: var(--grey-dark); }
+
+/* ── Option buttons inside popup ── */
+.more-popup-options {
+  padding: 10px 10px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.more-opt-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1.5px solid #dce1e7;
+  border-radius: 8px;
+  background: var(--white);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--grey-dark);
+  transition: all 0.15s;
+  text-align: left;
+}
+.more-opt-btn:hover { background: var(--grey-light); border-color: #bdc3c7; }
+.more-opt-btn.active { background: #eef2ff; }
+
+.more-opt-check {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #dce1e7;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  flex-shrink: 0;
+  transition: all 0.15s;
+  background: var(--white);
+}
+.more-opt-check.checked {
+  border-color: currentColor;
+  background: currentColor;
+  color: #fff;
+}
+
+.more-opt-label {
+  flex: 1;
+  font-weight: 600;
+}
+
+.more-opt-time {
+  font-size: 11px;
+  color: var(--grey-mid);
+  background: var(--grey-light);
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ── Popup footer ── */
+.more-popup-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--grey-light);
+  gap: 8px;
+}
+
+.more-checkout-pill {
+  font-size: 12px;
+  color: var(--grey-mid);
+  background: #f0f4f8;
+  padding: 4px 10px;
+  border-radius: 20px;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.more-checkout-pill strong { color: var(--grey-dark); }
+
+.more-check-btn {
+  padding: 7px 18px;
+  background: var(--blue-mid);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.more-check-btn:hover { background: var(--blue-dark); }
+
+/* ── Attendance Save & Mark Holiday Buttons ── */
+.btn-save-att {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  background: #16a34a;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, opacity 0.2s;
+  white-space: nowrap;
+}
+.btn-save-att:hover:not(:disabled) { background: #15803d; }
+.btn-save-att:disabled { opacity: 0.65; cursor: not-allowed; }
+
+.btn-mark-holiday {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: #8e44ad;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, opacity 0.2s;
+  white-space: nowrap;
+}
+.btn-mark-holiday:hover:not(:disabled) { background: #71368a; }
+.btn-mark-holiday:disabled { opacity: 0.65; cursor: not-allowed; }
+
+.btn-save-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+

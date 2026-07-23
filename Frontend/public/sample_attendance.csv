@@ -1,0 +1,9 @@
+emp_name,check_in_time,check_out_time,today,date
+John Smith,09:00,18:30,Present,2025-01-15
+Jane Doe,09:15,16:00,Present,2025-01-15
+Bob Johnson,,,Absent,2025-01-15
+Alice Brown,09:00,13:00,Half Day,2025-01-15
+Charlie Wilson,08:30,19:00,Present,2025-01-15
+Diana Prince,09:45,17:00,Present,2025-01-15
+Eve Adams,,,Absent,2025-01-15
+Frank Miller,09:00,17:00,Present,2025-01-15

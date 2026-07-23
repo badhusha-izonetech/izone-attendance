@@ -1,0 +1,53 @@
+/* ── Upload ── */
+.upload-zone {
+  border: 2px dashed var(--blue-accent);
+  border-radius: 12px;
+  padding: 52px 40px;
+  text-align: center;
+  background: #f0f7ff;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 24px;
+}
+.upload-zone:hover { background: #e1f0ff; border-color: var(--blue-dark); }
+.upload-zone p { color: var(--grey-mid); font-size: 14px; }
+.upload-zone strong { color: var(--blue-mid); }
+.upload-zone input[type="file"] { display: none; }
+.upload-zone code { background: #e8f4fd; padding: 2px 6px; border-radius: 4px; font-size: 12px; color: var(--blue-mid); }
+
+/* ── Upload hint box ── */
+.upload-hint-box {
+  background: #f8f9fa;
+  border: 1.5px solid #dce1e7;
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 18px;
+}
+.upload-hint-box strong { font-size: 13px; color: var(--blue-dark); }
+.upload-hint-codes {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.upload-hint-box code {
+  background: #e8f4fd;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--blue-mid);
+}
+
+/* ── Leave resolved employee row ── */
+.leave-resolved-emp {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #eaf4fb;
+  border: 1.5px solid #aed6f1;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: var(--grey-mid);
+}

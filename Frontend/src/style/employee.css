@@ -1,0 +1,28 @@
+/* ── Employee Page Styles ── */
+/* Action buttons in employee table */
+.btn-edit-small {
+  background: none;
+  border: none;
+  color: var(--blue-mid);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+.btn-edit-small:hover {
+  background: rgba(37, 99, 235, 0.1);
+}
+
+.btn-delete-small {
+  background: none;
+  border: none;
+  color: #e74c3c;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+.btn-delete-small:hover {
+  background: rgba(231, 76, 60, 0.1);
+}
+

@@ -43,8 +43,18 @@ export default function Attendance({
   // Local editing state — changes here do NOT flow to Dashboard/Report/LeaveList
   const [localRecords, setLocalRecords] = useState<DailyAttendance[]>(attendance)
 
+  const matchEmpId = (id1: string, id2: string) => {
+    if (!id1 || !id2) return false
+    const a = id1.trim().toLowerCase()
+    const b = id2.trim().toLowerCase()
+    if (a === b) return true
+    const numA = parseInt(a, 10)
+    const numB = parseInt(b, 10)
+    return !isNaN(numA) && !isNaN(numB) && numA === numB
+  }
+
   const getRecord = (empId: string) =>
-    localRecords.find(a => a.emp_id === empId && a.date === selectedDate)
+    localRecords.find(a => matchEmpId(a.emp_id, empId) && a.date === selectedDate)
 
   useEffect(() => {
     setLocalRecords(attendance)
@@ -175,11 +185,6 @@ export default function Attendance({
     const attendanceRecords = dayRecords.filter(a => {
       // Holiday records go to holiday table, not daily_attendance
       if (a.status === 'Holiday') return false
-      // If weekday and not holiday, default Present status with no times -> do NOT store in daily_attendance
-      const isEmpHoliday = holidays.some(h => h.emp_id === a.emp_id && h.date === selectedDate)
-      if (!isEmpHoliday && !isSunday && a.status === 'Present' && !a.check_in && !a.check_out) return false
-      // If check-in and check-out and status are all empty -> do NOT store in database
-      if (!a.check_in && !a.check_out && !a.status) return false
       return true
     })
 
@@ -407,8 +412,14 @@ export default function Attendance({
               <tbody>
                 {filteredEmps.map((emp, i) => {
                   const rec = getRecord(emp.emp_id)
-                  const isEmpHoliday = holidays.some(h => h.emp_id === emp.emp_id && h.date === selectedDate)
-                  const currentStatus = rec?.status || (isEmpHoliday || isSunday ? 'Holiday' : 'Present')
+                  const isEmpHoliday = holidays.some(h => matchEmpId(h.emp_id, emp.emp_id) && h.date === selectedDate)
+                  let currentStatus = rec?.status
+                  if ((!currentStatus || currentStatus === 'Holiday') && (rec?.check_in || rec?.check_out)) {
+                    currentStatus = isSunday || isEmpHoliday ? 'Weekend Working' : 'Present'
+                  }
+                  if (!currentStatus) {
+                    currentStatus = isEmpHoliday || isSunday ? 'Holiday' : 'Present'
+                  }
                   const isLeaveOrHoliday = currentStatus === 'Leave' || currentStatus === 'Holiday'
                   const isDetail = detailEmp?.id === emp.id
 

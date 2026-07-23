@@ -29,6 +29,16 @@ function mapEmployee(e: { id: string | number; name: string; emp_id: string; ema
   return { id: String(e.id), name: e.name, emp_id: e.emp_id, email: e.email, phone: e.phone || '', department: e.department }
 }
 
+function matchEmpId(id1: string, id2: string): boolean {
+  if (!id1 || !id2) return false
+  const a = id1.trim().toLowerCase()
+  const b = id2.trim().toLowerCase()
+  if (a === b) return true
+  const numA = parseInt(a.replace(/\D/g, ''), 10)
+  const numB = parseInt(b.replace(/\D/g, ''), 10)
+  return !isNaN(numA) && !isNaN(numB) && numA === numB
+}
+
 function mapDepartment(d: { id: string | number; name: string }): Department {
   return { id: String(d.id), name: d.name }
 }
@@ -208,21 +218,24 @@ export default function App() {
       setAttendance(prev => {
         const next = [...prev]
         savedRecords.forEach(r => {
-          const idx = next.findIndex(a => a.emp_id === r.emp_id && a.date === r.date)
+          const idx = next.findIndex(a => matchEmpId(a.emp_id, r.emp_id) && a.date === r.date)
           if (idx >= 0) next[idx] = r
           else next.push(r)
         })
         return next
       })
+
+      // Remove from holidays state any employee who now has active attendance (e.g. Weekend Working)
+      setHolidays(prev => prev.filter(h => !savedRecords.some(r => matchEmpId(r.emp_id, h.emp_id) && r.date === h.date)))
     }
 
     if (savedHolidays && savedHolidays.length > 0) {
       const holidayDates = new Set(savedHolidays.map((h: any) => h.date))
-      setAttendance(prev => prev.filter(a => !holidayDates.has(a.date)))
+      setAttendance(prev => prev.filter(a => !(holidayDates.has(a.date) && savedHolidays.some((h: any) => matchEmpId(a.emp_id, h.emp_id) && a.date === h.date))))
       setHolidays(prev => {
         const next = [...prev]
         savedHolidays.forEach(h => {
-          const idx = next.findIndex(x => x.emp_id === h.emp_id && x.date === h.date)
+          const idx = next.findIndex(x => matchEmpId(x.emp_id, h.emp_id) && x.date === h.date)
           if (idx >= 0) next[idx] = mapHoliday(h)
           else next.push(mapHoliday(h))
         })
@@ -306,16 +319,6 @@ export default function App() {
   const handleUpload = async (csvRecords: AttendanceRecord[], targetDate: string) => {
     const uploadDate = targetDate || todayStr()
 
-    const matchEmpId = (dbId: string, csvId: string) => {
-      const a = dbId.trim().toLowerCase()
-      const b = csvId.trim().toLowerCase()
-      if (a === b) return true
-      const numA = parseInt(a, 10)
-      const numB = parseInt(b, 10)
-      if (!isNaN(numA) && !isNaN(numB) && numA === numB) return true
-      return false
-    }
-
     const matchEmpName = (dbName: string, csvName: string) => {
       const normalize = (name: string) => {
         return (name || '')
@@ -333,27 +336,54 @@ export default function App() {
     const holidaysToUpsert: Omit<ApiHolidayRecord, 'id'>[] = []
 
     csvRecords.forEach(r => {
+      const recDate = r.date || uploadDate
       const emp = r.emp_id
         ? employees.find(e => matchEmpId(e.emp_id, r.emp_id!))
         : employees.find(e => matchEmpName(e.name, r.emp_name))
       const key = emp ? emp.emp_id : (r.emp_id || r.emp_name)
       const empNameStr = emp ? emp.name : r.emp_name
 
-      if (r.status === 'Holiday') {
+      const existingAtt = attendance.find(a => matchEmpId(a.emp_id, key) && a.date === recDate)
+      const finalCheckIn = r.check_in_time || (existingAtt?.check_in || '')
+      const finalCheckOut = r.check_out_time || (existingAtt?.check_out || '')
+
+      const hasPunchTimes = Boolean(finalCheckIn || finalCheckOut)
+      const [y, m, d] = recDate.split('-').map(Number)
+      const isSundayDate = new Date(y, m - 1, d).getDay() === 0
+
+      if (isSundayDate) {
+        if (hasPunchTimes || (r.status && r.status !== 'Holiday' && r.status !== 'Leave')) {
+          attendanceToUpsert.push({
+            emp_id:    key,
+            date:      recDate,
+            check_in:  finalCheckIn,
+            check_out: finalCheckOut,
+            status:    'Weekend Working',
+            work_tag:  autoTag(finalCheckIn, finalCheckOut),
+          })
+        } else {
+          holidaysToUpsert.push({
+            emp_id:       key,
+            emp_name:     empNameStr,
+            date:         recDate,
+            holiday_name: 'Sunday Holiday'
+          })
+        }
+      } else if (r.status === 'Holiday' && !hasPunchTimes) {
         holidaysToUpsert.push({
           emp_id:       key,
           emp_name:     empNameStr,
-          date:         uploadDate,
-          holiday_name: 'Sunday Holiday'
+          date:         recDate,
+          holiday_name: 'Holiday'
         })
       } else {
         attendanceToUpsert.push({
           emp_id:    key,
-          date:      uploadDate,
-          check_in:  r.check_in_time  || '',
-          check_out: r.check_out_time || '',
+          date:      recDate,
+          check_in:  finalCheckIn,
+          check_out: finalCheckOut,
           status:    r.status,
-          work_tag:  autoTag(r.check_in_time, r.check_out_time),
+          work_tag:  autoTag(finalCheckIn, finalCheckOut),
         })
       }
     })

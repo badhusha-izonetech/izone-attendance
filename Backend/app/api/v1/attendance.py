@@ -107,7 +107,7 @@ def delete_attendance_by_date(from_date: str, to_date: str, db: Session = Depend
     ).delete(synchronize_session=False)
 
     db.commit()
-    count_to_report = att_deleted if att_deleted > 0 else (leave_deleted + holiday_deleted)
+    count_to_report = att_deleted + leave_deleted + holiday_deleted
     return {
         "status": "success",
         "deleted_count": count_to_report,

@@ -25,8 +25,8 @@ export function toMinutes(t: string | null | undefined): number {
 
 export function parsePermissionData(tagStr: string | null | undefined): { start: string, end: string } | null {
   if (!tagStr) return null
-  const match = tagStr.match(/permission_([0-9]{1,2}:[0-9]{2})_([0-9]{1,2}:[0-9]{2})/)
-  if (match) {
+  const match = tagStr.match(/permission_([0-9:]*)_([0-9:]*)/)
+  if (match && (match[1] || match[2])) {
     return { start: match[1] || '', end: match[2] || '' }
   }
   return null
@@ -234,7 +234,7 @@ export function upsertPermission(tagStr: string | null, start: string, end: stri
   const newTag = `permission_${start}_${end}`
   if (!tagStr) return newTag
   if (tagStr.includes('permission_')) {
-    return tagStr.replace(/permission_[0-9:]*_[0-9:]*/, newTag)
+    return tagStr.replace(/permission_[^,.]*/, newTag)
   }
   return `${tagStr},${newTag}`
 }

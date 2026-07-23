@@ -56,43 +56,28 @@ function formatToTimeStr(rawTime: any): string {
     return `${String(rawTime.getHours()).padStart(2, '0')}:${String(rawTime.getMinutes()).padStart(2, '0')}`
   }
 
-  // Check if string contains Date/Time info or looks like Date
   const rawStr = String(rawTime).trim()
-  if (rawStr.includes('T')) {
-    const timePart = rawStr.split('T')[1]
+  if (!rawStr) return ''
+
+  // 0. If string contains date + time with space or 'T' (e.g. "2026-07-23 18:30:00", "23/07/2026 6:30 PM", "2026-07-23T18:30:00")
+  if (rawStr.includes('T') || rawStr.includes(' ')) {
+    const timePart = rawStr.split(/[T\s]+/)[1]
     if (timePart) {
-      const hhmm = timePart.match(/^(\d{1,2}):(\d{2})/)
-      if (hhmm) return `${hhmm[1].padStart(2, '0')}:${hhmm[2]}`
+      const ampmMatch = timePart.match(/^(\d{1,2})[:.](\d{2})(?::\d{2})?\s*(am|pm|a\.m\.|p\.m\.)/i)
+      if (ampmMatch) {
+        let h = parseInt(ampmMatch[1], 10)
+        const m = ampmMatch[2]
+        const p = ampmMatch[3].replace(/\./g, '').toLowerCase()
+        if (p === 'am') { if (h === 12) h = 0 } else { if (h !== 12) h += 12 }
+        return `${String(h).padStart(2, '0')}:${m}`
+      }
+      const hhmmMatch = timePart.match(/^(\d{1,2}):(\d{2})/)
+      if (hhmmMatch) return `${String(hhmmMatch[1]).padStart(2, '0')}:${hhmmMatch[2]}`
     }
   }
 
-  const num = Number(rawTime)
-
-  // Excel raw time fraction: 0.0 = 00:00, 0.708333 = 17:00, 0.770833 = 18:30
-  if (!isNaN(num) && num >= 0 && num < 1) {
-    const totalMins = Math.round(num * 24 * 60)
-    return `${String(Math.floor(totalMins / 60)).padStart(2, '0')}:${String(totalMins % 60).padStart(2, '0')}`
-  }
-
-  // Excel combined date+time (e.g. 46207.770833) — extract time fraction only
-  if (!isNaN(num) && num > 1) {
-    const frac = num - Math.floor(num)
-    if (frac > 0.0001) {
-      const totalMins = Math.round(frac * 24 * 60)
-      return `${String(Math.floor(totalMins / 60)).padStart(2, '0')}:${String(totalMins % 60).padStart(2, '0')}`
-    }
-  }
-
-  // String fallback: "10:00 AM", "6:30 PM", "18:30", "10:00", "10.30"
-  let clean = rawStr
-  if (clean.includes('.') && !clean.includes(':')) {
-    const parts = clean.split('.')
-    if (parts.length === 2 && parts[0].length <= 2 && parts[1].length <= 2) {
-      clean = `${parts[0]}:${parts[1]}`
-    }
-  }
-
-  const ampm = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(am|pm|a\.m\.|p\.m\.)/i)
+  // 1. Standard AM/PM string: "10:00 AM", "6:30 PM", "10.45 AM"
+  const ampm = rawStr.match(/^(\d{1,2})[:.](\d{2})(?::\d{2})?\s*(am|pm|a\.m\.|p\.m\.)/i)
   if (ampm) {
     let h = parseInt(ampm[1], 10)
     const m = ampm[2]
@@ -101,8 +86,50 @@ function formatToTimeStr(rawTime: any): string {
     return `${String(h).padStart(2, '0')}:${m}`
   }
 
-  const hhmm = clean.match(/^(\d{1,2}):(\d{2})/)
-  if (hhmm) return `${hhmm[1].padStart(2, '0')}:${hhmm[2]}`
+  // 2. Standard HH:MM 24-hr string: "10:00", "19:30", "20:25", "09:50"
+  const hhmm = rawStr.match(/^(\d{1,2}):(\d{2})/)
+  if (hhmm) {
+    const h = parseInt(hhmm[1], 10)
+    const m = parseInt(hhmm[2], 10)
+    if (h >= 0 && h <= 23 && m >= 0 && m <= 59) {
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+    }
+  }
+
+  const num = Number(rawTime)
+
+  // 3. Excel raw time fraction or datetime serial (e.g. 0.416666 = 10:00, or 45480.791666 = 19:00)
+  if (!isNaN(num) && num > 0) {
+    const frac = num < 1 ? num : num - Math.floor(num)
+    const totalMins = Math.round(frac * 24 * 60)
+    if (totalMins > 0 && totalMins < 24 * 60) {
+      const h = Math.floor(totalMins / 60)
+      const m = totalMins % 60
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+    }
+  }
+
+  // 4. Excel decimal time (e.g. 10.00, 10.45, 9.50, 19.00, 19.30, 20.25, 20.50, 10.27)
+  if (rawStr.includes('.')) {
+    const parts = rawStr.split('.')
+    if (parts.length === 2) {
+      const h = parseInt(parts[0], 10)
+      let mStr = parts[1]
+      if (mStr.length === 1) mStr = mStr + '0'
+      const m = parseInt(mStr.substring(0, 2), 10)
+      if (!isNaN(h) && !isNaN(m) && h >= 0 && h <= 24 && m >= 0 && m <= 59) {
+        const finalH = h === 24 ? 0 : h
+        return `${String(finalH).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+      }
+    }
+  }
+
+  // 5. Integer hour numbers: 10 -> "10:00", 12 -> "12:00", 19 -> "19:00"
+  if (!isNaN(num) && num >= 1 && num <= 24) {
+    const h = Math.floor(num)
+    const finalH = h === 24 ? 0 : h
+    return `${String(finalH).padStart(2, '0')}:00`
+  }
 
   return ''
 }
@@ -130,8 +157,8 @@ function findHeaderRowIndex(ws: XLSX.WorkSheet): number {
   const targetHeaders = [
     'empname', 'employeename', 'name', 
     'empid', 'employeeid', 'id',
-    'checkintime', 'checkin', 'intime', 'in',
-    'checkouttime', 'checkout', 'outtime', 'out', 'checkinout',
+    'checkintime', 'checkin', 'intime', 'in', 'cin', 'punchin', 'timein', 'clockin', 'firstin', 'entry', 'entrytime', 'start', 'starttime',
+    'checkouttime', 'checkout', 'outtime', 'out', 'cout', 'checkinout', 'punchout', 'timeout', 'clockout', 'lastout', 'logout', 'signout', 'exit', 'exittime', 'offduty', 'dutyout', 'shiftout',
     'today', 'status', 'attendance', 'att', 'state', 'remarks'
   ]
 
@@ -142,7 +169,7 @@ function findHeaderRowIndex(ws: XLSX.WorkSheet): number {
     // Count how many items in this row match any of our target headers
     let matchCount = 0
     row.forEach(cell => {
-      const normCell = String(cell || '').toLowerCase().replace(/[\s_-]/g, '')
+      const normCell = String(cell || '').toLowerCase().replace(/[\s_\-\/\.]/g, '')
       if (normCell && targetHeaders.includes(normCell)) {
         matchCount++
       }
@@ -156,11 +183,47 @@ function findHeaderRowIndex(ws: XLSX.WorkSheet): number {
 
   return 0 // default to the first row if we can't find anything
 }
+function extractTimesFromString(str: string): string[] {
+  if (!str) return []
+  const matches = str.match(/(\d{1,2}[:.]\d{2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)?)/gi)
+  if (!matches) return []
+  return matches.map(m => formatToTimeStr(m)).filter(Boolean)
+}
+
+function extractAllTimesFromRow(row: Record<string, any>): string[] {
+  const times: string[] = []
+  const ignoreKeys = [
+    'id', 'empid', 'employeeid', 'name', 'empname', 'employeename', 'date', 'status',
+    'today', 'hours', 'workinghours', 'total', 'totalhours', 'workhours', 'remarks', 'att', 'state'
+  ]
+
+  Object.keys(row).forEach(k => {
+    const normK = k.toLowerCase().replace(/[\s_\-\/\.]/g, '')
+    if (ignoreKeys.includes(normK)) return
+
+    const val = row[k]
+    if (val === null || val === undefined || val === '') return
+
+    const strVal = String(val).trim()
+    const extracted = extractTimesFromString(strVal)
+    if (extracted.length > 0) {
+      extracted.forEach(t => {
+        if (!times.includes(t)) times.push(t)
+      })
+    } else {
+      const t = formatToTimeStr(val)
+      if (t && !times.includes(t)) {
+        times.push(t)
+      }
+    }
+  })
+  return times
+}
 
 function normalizeRow(row: Record<string, any>, targetDate: string): AttendanceRecord | null {
   const normalizedRow: Record<string, any> = {}
   Object.keys(row).forEach(k => {
-    const normKey = k.toLowerCase().replace(/[\s_-]/g, '')
+    const normKey = k.toLowerCase().replace(/[\s_\-\/\.]/g, '')
     normalizedRow[normKey] = row[k]
   })
 
@@ -181,21 +244,78 @@ function normalizeRow(row: Record<string, any>, targetDate: string): AttendanceR
     date = formatToISODate(String(dateRaw).split(/[ T]/)[0])
   }
 
-  const check_in_time = formatToTimeStr(
+  let check_in_time = formatToTimeStr(
     normalizedRow['checkintime'] ??
     normalizedRow['checkin'] ??
     normalizedRow['intime'] ??
     normalizedRow['in'] ??
+    normalizedRow['cin'] ??
+    normalizedRow['punchin'] ??
+    normalizedRow['timein'] ??
+    normalizedRow['clockin'] ??
+    normalizedRow['firstin'] ??
+    normalizedRow['entry'] ??
+    normalizedRow['entrytime'] ??
+    normalizedRow['start'] ??
+    normalizedRow['starttime'] ??
+    normalizedRow['onduty'] ??
+    normalizedRow['dutyin'] ??
+    normalizedRow['shiftin'] ??
+    normalizedRow['punch1'] ??
+    normalizedRow['in1'] ??
+    normalizedRow['time1'] ??
     ''
   )
-  const check_out_time = formatToTimeStr(
+  let check_out_time = formatToTimeStr(
     normalizedRow['checkouttime'] ??
     normalizedRow['checkout'] ??
     normalizedRow['outtime'] ??
     normalizedRow['out'] ??
-    normalizedRow['checkinout'] ??
+    normalizedRow['cout'] ??
+    normalizedRow['punchout'] ??
+    normalizedRow['timeout'] ??
+    normalizedRow['clockout'] ??
+    normalizedRow['lastout'] ??
+    normalizedRow['logout'] ??
+    normalizedRow['signout'] ??
+    normalizedRow['exit'] ??
+    normalizedRow['exittime'] ??
+    normalizedRow['end'] ??
+    normalizedRow['endtime'] ??
+    normalizedRow['offduty'] ??
+    normalizedRow['dutyout'] ??
+    normalizedRow['shiftout'] ??
+    normalizedRow['punch2'] ??
+    normalizedRow['lastpunch'] ??
+    normalizedRow['out1'] ??
+    normalizedRow['out2'] ??
+    normalizedRow['p2'] ??
+    normalizedRow['exit1'] ??
+    normalizedRow['time2'] ??
     ''
   )
+
+  // Fallback 1: check single combined column containing both times e.g. "09:30 - 18:30" or "09:30 18:30"
+  const combinedVal = normalizedRow['checkinout'] ?? normalizedRow['time'] ?? normalizedRow['punches'] ?? normalizedRow['logs'] ?? normalizedRow['punch'] ?? normalizedRow['attlog'] ?? ''
+  if (combinedVal) {
+    const combinedTimes = extractTimesFromString(String(combinedVal))
+    if (combinedTimes.length >= 2) {
+      if (!check_in_time) check_in_time = combinedTimes[0]
+      if (!check_out_time || check_out_time === check_in_time) check_out_time = combinedTimes[combinedTimes.length - 1]
+    } else if (combinedTimes.length === 1 && !check_in_time) {
+      check_in_time = combinedTimes[0]
+    }
+  }
+
+  // Fallback 2: Scan all cells in the row for sequential punch times if check_out_time is still missing or duplicate
+  if (!check_out_time || check_out_time === check_in_time) {
+    const timesInRow = extractAllTimesFromRow(normalizedRow)
+    if (timesInRow.length >= 2) {
+      if (!check_in_time) check_in_time = timesInRow[0]
+      check_out_time = timesInRow[timesInRow.length - 1]
+    }
+  }
+  
   const statusVal = String(
     normalizedRow['today'] ??
     normalizedRow['status'] ??
@@ -220,23 +340,18 @@ function normalizeRow(row: Record<string, any>, targetDate: string): AttendanceR
     isSunday = (day === 0)
   }
 
-  // If Check In, Check Out and today are empty
-  if (!check_in_time && !check_out_time && !statusVal) {
-    if (isSunday) {
-      status = 'Holiday'
+  const hasTimes = Boolean(check_in_time || check_out_time)
+
+  if (isSunday) {
+    const sLower = statusVal.trim().toLowerCase()
+    const isExplicitNonWorking = ['l', 'leave', 'a', 'absent', 'h', 'holiday'].includes(sLower)
+    if (hasTimes || (statusVal && !isExplicitNonWorking)) {
+      status = 'Weekend Working'
     } else {
-      status = 'Leave'
+      status = 'Holiday'
     }
-  } else {
-    // Sunday + attendance -> Weekend Working
-    if (isSunday) {
-      const hasAttendance = check_in_time || check_out_time || (statusVal && !['leave', 'absent', 'a', 'l'].includes(statusVal.trim().toLowerCase()))
-      if (hasAttendance) {
-        status = 'Weekend Working'
-      } else {
-        status = 'Holiday'
-      }
-    }
+  } else if (!hasTimes && !statusVal) {
+    status = 'Leave'
   }
 
   if (check_in_time && check_out_time && status !== 'Weekend Working') {

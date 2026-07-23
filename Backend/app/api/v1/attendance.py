@@ -88,6 +88,37 @@ def delete_attendance_by_date(from_date: str, to_date: str, db: Session = Depend
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
 
+    # Collect unique (emp_id, date) tuples across all tables before deletion
+    unique_records = set()
+
+    # 1. DailyAttendance
+    att_rows = db.query(model.DailyAttendance.emp_id, model.DailyAttendance.date).filter(
+        model.DailyAttendance.date >= from_date_obj,
+        model.DailyAttendance.date <= to_date_obj
+    ).all()
+    for row in att_rows:
+        unique_records.add((str(row.emp_id), str(row.date)))
+
+    # 2. LeaveRecord
+    leave_rows = db.query(model.LeaveRecord.emp_id, model.LeaveRecord.from_date, model.LeaveRecord.to_date).filter(
+        model.LeaveRecord.from_date >= from_date_obj,
+        model.LeaveRecord.to_date <= to_date_obj
+    ).all()
+    for row in leave_rows:
+        curr = row.from_date
+        while curr <= row.to_date:
+            if from_date_obj <= curr <= to_date_obj:
+                unique_records.add((str(row.emp_id), str(curr)))
+            curr += datetime.timedelta(days=1)
+
+    # 3. Holiday
+    holiday_rows = db.query(model.Holiday.emp_id, model.Holiday.date).filter(
+        model.Holiday.date >= from_date_obj,
+        model.Holiday.date <= to_date_obj
+    ).all()
+    for row in holiday_rows:
+        unique_records.add((str(row.emp_id), str(row.date)))
+
     # Delete daily attendance records
     att_deleted = db.query(model.DailyAttendance).filter(
         model.DailyAttendance.date >= from_date_obj,
@@ -107,7 +138,7 @@ def delete_attendance_by_date(from_date: str, to_date: str, db: Session = Depend
     ).delete(synchronize_session=False)
 
     db.commit()
-    count_to_report = att_deleted + leave_deleted + holiday_deleted
+    count_to_report = len(unique_records)
     return {
         "status": "success",
         "deleted_count": count_to_report,

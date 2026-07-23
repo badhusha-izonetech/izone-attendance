@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { parsePermissionData, calcPermissionHours, calcHours } from '../../utils/attendanceUtils'
+import { parsePermissionData, calcPermissionHours, calcHours, autoTag } from '../../utils/attendanceUtils'
 
 interface DetailTabProps {
   enriched: any[]
@@ -16,31 +16,16 @@ const STATUS_CLASS: Record<string, string> = {
 
 const TAG_CLASS: Record<string, string> = {
   earlycome: 'badge-earlycome',
+  latein: 'badge-latein',
   earlyout: 'badge-earlyout',
   overtime: 'badge-overtime',
 }
 
 const TAG_LABEL: Record<string, string> = {
   earlycome: 'Early Come',
+  latein: 'Late In',
   earlyout: 'Early Out',
   overtime: 'Overtime',
-}
-
-function getDynamicWorkTag(inT: string, outT: string): string | null {
-  const tags: string[] = []
-  const toM = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m }
-  
-  if (inT && toM(inT) < toM('10:00')) {
-    tags.push('earlycome')
-  }
-  if (outT) {
-    if (toM(outT) > toM('18:30')) {
-      tags.push('overtime')
-    } else if (toM(outT) < toM('18:30')) {
-      tags.push('earlyout')
-    }
-  }
-  return tags.length > 0 ? tags.join(',') : null
 }
 
 function renderTags(tagStr: string | null) {
@@ -103,7 +88,7 @@ const DetailTab = memo(function DetailTab({ enriched, dateLabel }: DetailTabProp
                   <td>{a.check_out || '—'}</td>
                   <td style={{ fontWeight: 600 }}>{hrs !== null ? `${hrs.toFixed(1)}h` : '—'}</td>
                   <td><span className={`badge ${STATUS_CLASS[a.status] || 'badge-present'}`}>{a.status}</span></td>
-                  <td>{renderTags(a.work_tag || getDynamicWorkTag(a.check_in || '', a.check_out || ''))}</td>
+                  <td>{renderTags(a.work_tag || autoTag(a.check_in || '', a.check_out || '', a.work_tag))}</td>
                 </tr>
               )
             })}

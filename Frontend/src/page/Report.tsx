@@ -12,6 +12,13 @@ import {
   MdDelete,
 } from 'react-icons/md'
 import type { DailyAttendance, Employee, LeaveRecord, HolidayRecord } from '../types'
+import {
+  calcHours,
+  getAttendanceMetrics,
+  getOvertimeMinutes,
+  formatMins,
+  autoTag
+} from '../utils/attendanceUtils'
 
 interface ReportProps {
   attendance: DailyAttendance[]
@@ -26,65 +33,6 @@ type ReportTab = 'summary' | 'detail'
 
 function todayStr() {
   return new Date().toISOString().split('T')[0]
-}
-
-function calcHours(inT: string, outT: string, work_tag?: string | null): number | null {
-  if (!inT || !outT) return null
-  const toM = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m }
-  
-  let outM = toM(outT)
-  const inM = toM(inT)
-  if (outM <= inM) outM += 24 * 60 // handle overnight
-
-  let diff = (outM - inM) / 60
-  
-  if (work_tag && work_tag.includes('permission_')) {
-    const match = work_tag.match(/permission_([0-9:]*)_([0-9:]*)/)
-    if (match && match[1] && match[2]) {
-      let pOut = toM(match[2])
-      const pIn = toM(match[1])
-      if (pOut <= pIn) pOut += 24 * 60
-      
-      const overlapStart = Math.max(inM, pIn)
-      const overlapEnd = Math.min(outM, pOut)
-      if (overlapEnd > overlapStart) {
-        diff -= (overlapEnd - overlapStart) / 60
-      }
-    }
-  }
-
-  return diff > 0 ? diff : null
-}
-
-const STANDARD_OUT = '18:30'
-
-function toMinutes(t: string): number {
-  if (!t) return 0
-  const [h, m] = t.split(':').map(Number)
-  return h * 60 + m
-}
-
-function getOvertimeMinutes(inT: string, outT: string, work_tag?: string | null): number {
-  if (!inT || !outT) return 0
-  let outMins = toMinutes(outT)
-  const inMins = toMinutes(inT)
-  if (outMins <= inMins) outMins += 24 * 60
-
-  if (outMins <= toMinutes(STANDARD_OUT)) return 0
-
-  const workedHrs = calcHours(inT, outT, work_tag)
-  if (workedHrs === null || workedHrs <= 8.5) return 0
-
-  const otHrs = workedHrs - 8.5
-  return Math.round(otHrs * 60)
-}
-
-function formatMins(mins: number): string {
-  if (mins <= 0) return '—'
-  if (mins < 60) return `${mins}m`
-  const h = Math.floor(mins / 60)
-  const m = mins % 60
-  return m > 0 ? `${h}h ${m}m` : `${h}h`
 }
 
 const STATUS_CLASS: Record<string, string> = {
@@ -105,23 +53,6 @@ const TAG_LABEL: Record<string, string> = {
   earlycome: 'Early Come',
   earlyout: 'Early Out',
   overtime: 'Overtime',
-}
-
-function getDynamicWorkTag(inT: string, outT: string): string | null {
-  const tags: string[] = []
-  const toM = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m }
-
-  if (inT && toM(inT) < toM('10:00')) {
-    tags.push('earlycome')
-  }
-  if (outT) {
-    if (toM(outT) > toM('18:30')) {
-      tags.push('overtime')
-    } else if (toM(outT) < toM('18:30')) {
-      tags.push('earlyout')
-    }
-  }
-  return tags.length > 0 ? tags.join(',') : null
 }
 
 function renderTags(tagStr: string | null) {
@@ -255,27 +186,23 @@ const Report = memo(function Report({ attendance, employees, leaves, holidays, o
       const a = aObj.item
       const b = bObj.item
 
-      const toM = (t: string) => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m }
-
       const isLeaveOrHolidayA = a.status === 'Leave' || a.status === 'Holiday'
       const isLeaveOrHolidayB = b.status === 'Leave' || b.status === 'Holiday'
 
-      const earlyInMinsA = !isLeaveOrHolidayA && a.check_in ? Math.max(0, toM('10:00') - toM(a.check_in)) : 0
-      const earlyInMinsB = !isLeaveOrHolidayB && b.check_in ? Math.max(0, toM('10:00') - toM(b.check_in)) : 0
+      const metricsA = !isLeaveOrHolidayA ? getAttendanceMetrics(a.check_in, a.check_out, a.work_tag) : null
+      const metricsB = !isLeaveOrHolidayB ? getAttendanceMetrics(b.check_in, b.check_out, b.work_tag) : null
 
-      const lateInMinsA = !isLeaveOrHolidayA && a.check_in ? Math.max(0, toM(a.check_in) - toM('10:05')) : 0
-      const lateInMinsB = !isLeaveOrHolidayB && b.check_in ? Math.max(0, toM(b.check_in) - toM('10:05')) : 0
+      const earlyInMinsA = metricsA ? metricsA.earlyInMins : 0
+      const earlyInMinsB = metricsB ? metricsB.earlyInMins : 0
 
-      let outMA = toM(a.check_out)
-      let outMB = toM(b.check_out)
-      if (a.check_in && outMA <= toM(a.check_in)) outMA += 24 * 60
-      if (b.check_in && outMB <= toM(b.check_in)) outMB += 24 * 60
+      const lateInMinsA = metricsA ? metricsA.lateInMins : 0
+      const lateInMinsB = metricsB ? metricsB.lateInMins : 0
 
-      const earlyOutMinsA = !isLeaveOrHolidayA && a.check_in && a.check_out ? Math.max(0, toM('18:30') - outMA) : 0
-      const earlyOutMinsB = !isLeaveOrHolidayB && b.check_in && b.check_out ? Math.max(0, toM('18:30') - outMB) : 0
+      const earlyOutMinsA = metricsA ? metricsA.earlyOutMins : 0
+      const earlyOutMinsB = metricsB ? metricsB.earlyOutMins : 0
 
-      const otMinsA = !isLeaveOrHolidayA && a.check_in && a.check_out ? Math.max(0, outMA - toM('18:30')) : 0
-      const otMinsB = !isLeaveOrHolidayB && b.check_in && b.check_out ? Math.max(0, outMB - toM('18:30')) : 0
+      const otMinsA = metricsA ? metricsA.overtimeMins : 0
+      const otMinsB = metricsB ? metricsB.overtimeMins : 0
 
       let valA = 0
       let valB = 0
@@ -399,7 +326,7 @@ const Report = memo(function Report({ attendance, employees, leaves, holidays, o
       }
 
       if (a.check_in && a.check_out) {
-        info.overtimeMins += getOvertimeMinutes(a.check_in, a.check_out)
+        info.overtimeMins += getOvertimeMinutes(a.check_in, a.check_out, a.work_tag)
       }
     })
 
@@ -443,7 +370,7 @@ const Report = memo(function Report({ attendance, employees, leaves, holidays, o
     present: enriched.filter(a => a.status === 'Present' || a.status === 'Weekend Working').length,
     halfday: enriched.filter(a => a.status === 'Half Day').length,
     leave: enriched.filter(a => a.status === 'Leave').length,
-    overtime: enriched.filter(a => a.work_tag === 'overtime').length,
+    overtime: enriched.filter(a => a.work_tag === 'overtime' || (a.check_in && a.check_out && getOvertimeMinutes(a.check_in, a.check_out, a.work_tag) > 0)).length,
   }), [enriched])
 
   /* ── Date label for display ── */
@@ -483,7 +410,7 @@ const Report = memo(function Report({ attendance, employees, leaves, holidays, o
 
         rows.forEach((a, i) => {
           const otMins = a.check_in && a.check_out ? getOvertimeMinutes(a.check_in, a.check_out, a.work_tag) : 0
-          const dynamicTag = a.work_tag || getDynamicWorkTag(a.check_in || '', a.check_out || '')
+          const dynamicTag = a.work_tag || autoTag(a.check_in || '', a.check_out || '', a.work_tag)
           sheetRows.push({
             '#': i + 1,
             'Employee ID': a.emp_id,
@@ -793,7 +720,7 @@ const Report = memo(function Report({ attendance, employees, leaves, holidays, o
                           <td>{a.emp_name}</td>
                           <td>{a.department}</td>
                           <td><span className={`badge ${STATUS_CLASS[a.status] || 'badge-present'}`}>{a.status}</span></td>
-                          <td>{renderTags(a.work_tag || getDynamicWorkTag(a.check_in || '', a.check_out || ''))}</td>
+                          <td>{renderTags(a.work_tag || autoTag(a.check_in || '', a.check_out || '', a.work_tag))}</td>
                           <td>{calcHours(a.check_in, a.check_out, a.work_tag) !== null ? `${calcHours(a.check_in, a.check_out, a.work_tag)!.toFixed(1)}h` : '—'}</td>
                         </tr>
                       ))}
@@ -838,7 +765,7 @@ const Report = memo(function Report({ attendance, employees, leaves, holidays, o
                           <td>{a.check_out || '—'}</td>
                           <td style={{ fontWeight: 600 }}>{hrs !== null ? `${hrs.toFixed(1)}h` : '—'}</td>
                           <td><span className={`badge ${STATUS_CLASS[a.status] || 'badge-present'}`}>{a.status}</span></td>
-                          <td>{renderTags(a.work_tag || getDynamicWorkTag(a.check_in || '', a.check_out || ''))}</td>
+                          <td>{renderTags(a.work_tag || autoTag(a.check_in || '', a.check_out || '', a.work_tag))}</td>
                         </tr>
                       )
                     })}

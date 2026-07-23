@@ -1,7 +1,10 @@
 import { useState, useMemo, useRef, useEffect, memo } from 'react'
 import { MdCalendarToday, MdMoreVert } from 'react-icons/md'
 import type { Employee, DailyAttendance, LeaveRecord, HolidayRecord, Department } from '../types'
-import { calcHours } from '../utils/attendanceUtils'
+import {
+  getAttendanceMetrics,
+  formatMins
+} from '../utils/attendanceUtils'
 
 interface AttendanceListProps {
   employees: Employee[]
@@ -26,56 +29,6 @@ function getTodayDateStr(): string {
   const month = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
-}
-
-function toMinutes(t: string): number {
-  if (!t) return 0
-  const [h, m] = t.split(':').map(Number)
-  return h * 60 + m
-}
-
-function getEarlyInMinutes(inT: string): number {
-  if (!inT) return 0
-  const diff = toMinutes('10:00') - toMinutes(inT)
-  return diff > 0 ? diff : 0
-}
-
-function getEarlyOutMinutes(inT: string, outT: string): number {
-  if (!inT || !outT) return 0
-  let outMins = toMinutes(outT)
-  const inMins = toMinutes(inT)
-  if (outMins <= inMins) outMins += 24 * 60
-  const diff = toMinutes('18:30') - outMins
-  return diff > 0 ? diff : 0
-}
-
-function getLateInMinutes(inT: string, work_tag?: string | null): number {
-  if (!inT) return 0
-  if (work_tag && work_tag.includes('permission_')) return 0
-  const diff = toMinutes(inT) - toMinutes('10:05')
-  return diff > 0 ? diff : 0
-}
-
-function getOvertimeMinutes(inT: string, outT: string, work_tag?: string | null): number {
-  if (!inT || !outT) return 0
-  let outMins = toMinutes(outT)
-  const inMins = toMinutes(inT)
-  if (outMins <= inMins) outMins += 24 * 60
-
-  if (outMins <= toMinutes('18:30')) return 0
-
-  const workedHrs = calcHours(inT, outT, work_tag)
-  if (workedHrs === null || workedHrs <= 8.5) return 0
-
-  const otHrs = workedHrs - 8.5
-  return Math.round(otHrs * 60)
-}
-
-function formatMins(mins: number): string {
-  if (mins < 60) return `${mins}m`
-  const h = Math.floor(mins / 60)
-  const m = mins % 60
-  return m > 0 ? `${h}h ${m}m` : `${h}h`
 }
 
 interface HeaderMenuProps {
@@ -279,17 +232,20 @@ const AttendanceList = memo(function AttendanceList({
       const isLeaveOrHolidayA = a.status === 'Leave' || a.status === 'Holiday'
       const isLeaveOrHolidayB = b.status === 'Leave' || b.status === 'Holiday'
 
-      const earlyInA = !isLeaveOrHolidayA && a.check_in ? getEarlyInMinutes(a.check_in) : 0
-      const earlyInB = !isLeaveOrHolidayB && b.check_in ? getEarlyInMinutes(b.check_in) : 0
+      const metricsA = !isLeaveOrHolidayA ? getAttendanceMetrics(a.check_in, a.check_out, a.work_tag) : null
+      const metricsB = !isLeaveOrHolidayB ? getAttendanceMetrics(b.check_in, b.check_out, b.work_tag) : null
 
-      const lateInA = !isLeaveOrHolidayA && a.check_in ? getLateInMinutes(a.check_in, a.work_tag) : 0
-      const lateInB = !isLeaveOrHolidayB && b.check_in ? getLateInMinutes(b.check_in, b.work_tag) : 0
+      const earlyInA = metricsA ? metricsA.earlyInMins : 0
+      const earlyInB = metricsB ? metricsB.earlyInMins : 0
 
-      const earlyOutA = !isLeaveOrHolidayA && a.check_in && a.check_out ? getEarlyOutMinutes(a.check_in, a.check_out) : 0
-      const earlyOutB = !isLeaveOrHolidayB && b.check_in && b.check_out ? getEarlyOutMinutes(b.check_in, b.check_out) : 0
+      const lateInA = metricsA ? metricsA.lateInMins : 0
+      const lateInB = metricsB ? metricsB.lateInMins : 0
 
-      const otA = !isLeaveOrHolidayA && a.check_in && a.check_out ? getOvertimeMinutes(a.check_in, a.check_out, a.work_tag) : 0
-      const otB = !isLeaveOrHolidayB && b.check_in && b.check_out ? getOvertimeMinutes(b.check_in, b.check_out, b.work_tag) : 0
+      const earlyOutA = metricsA ? metricsA.earlyOutMins : 0
+      const earlyOutB = metricsB ? metricsB.earlyOutMins : 0
+
+      const otA = metricsA ? metricsA.overtimeMins : 0
+      const otB = metricsB ? metricsB.overtimeMins : 0
 
       let valA = 0
       let valB = 0
@@ -459,31 +415,18 @@ const AttendanceList = memo(function AttendanceList({
             <tbody>
               {filteredDayRecords.map((rec, i) => {
                 const isLeaveOrHoliday = rec.status === 'Leave' || rec.status === 'Holiday'
-                const hrs = !isLeaveOrHoliday && rec.check_in && rec.check_out ? calcHours(rec.check_in, rec.check_out, rec.work_tag) : null
-                const rawHrs = !isLeaveOrHoliday && rec.check_in && rec.check_out ? calcHours(rec.check_in, rec.check_out) : null
-                const targetHrs = hrs !== null ? hrs : rawHrs
+                const metrics = !isLeaveOrHoliday
+                  ? getAttendanceMetrics(rec.check_in, rec.check_out, rec.work_tag)
+                  : { workingHours: null, earlyInMins: 0, lateInMins: 0, earlyOutMins: 0, overtimeMins: 0, permissionHours: 0 }
+
+                const targetHrs = metrics.workingHours
                 const diffMins = targetHrs !== null ? Math.round((targetHrs - 8.5) * 60) : null
-
-                const earlyInMins = !isLeaveOrHoliday && rec.check_in ? getEarlyInMinutes(rec.check_in) : 0
-                const lateInMins = !isLeaveOrHoliday && rec.check_in ? getLateInMinutes(rec.check_in, rec.work_tag) : 0
-                const earlyOutMins = !isLeaveOrHoliday && rec.check_in && rec.check_out ? getEarlyOutMinutes(rec.check_in, rec.check_out) : 0
-                const overtimeMins = !isLeaveOrHoliday && rec.check_in && rec.check_out ? getOvertimeMinutes(rec.check_in, rec.check_out, rec.work_tag) : 0
-
-                // Split tags if present
-                const tagsList = rec.work_tag ? rec.work_tag.split(',') : []
-                const hasPermission = tagsList.some(t => t.startsWith('permission_'))
-                let pHours = null
-                if (hasPermission) {
-                  const pMatch = rec.work_tag?.match(/permission_([0-9:]*)_([0-9:]*)/)
-                  if (pMatch && pMatch[1] && pMatch[2]) {
-                    const toM = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m }
-                    let pOut = toM(pMatch[2])
-                    const pIn = toM(pMatch[1])
-                    if (pOut <= pIn) pOut += 24 * 60
-                    const diff = (pOut - pIn) / 60
-                    if (diff > 0) pHours = diff
-                  }
-                }
+                const earlyInMins = metrics.earlyInMins
+                const lateInMins = metrics.lateInMins
+                const earlyOutMins = metrics.earlyOutMins
+                const overtimeMins = metrics.overtimeMins
+                const pHours = metrics.permissionHours > 0 ? metrics.permissionHours : null
+                const hasPermission = pHours !== null || !!rec.work_tag?.includes('permission_')
 
                 return (
                   <tr key={rec.emp_id}>
@@ -571,19 +514,19 @@ const AttendanceList = memo(function AttendanceList({
                     )}
 
                     <td style={{ textAlign: 'center' }}>
-                      {hrs !== null ? (
+                      {targetHrs !== null ? (
                         <span
                           style={{
                             fontWeight: 700,
                             fontSize: '12px',
                             padding: '3px 10px',
                             borderRadius: '6px',
-                            background: hrs >= 8.5 ? '#d5f5e3' : '#fadbd8',
-                            color: hrs >= 8.5 ? '#1e8449' : '#c0392b',
+                            background: targetHrs >= 8.5 ? '#d5f5e3' : '#fadbd8',
+                            color: targetHrs >= 8.5 ? '#1e8449' : '#c0392b',
                             display: 'inline-block'
                           }}
                         >
-                          {hrs.toFixed(1)}h
+                          {targetHrs.toFixed(1)}h
                         </span>
                       ) : (
                         <span style={{ color: '#ccc' }}>—</span>

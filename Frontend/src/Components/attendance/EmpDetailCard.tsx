@@ -1,35 +1,7 @@
 import { MdClose } from 'react-icons/md'
 import { memo } from 'react'
 import type { Employee, DailyAttendance } from '../../types'
-import { parsePermissionData, calcPermissionHours } from '../../utils/attendanceUtils'
-
-function calcHours(inT: string, outT: string, work_tag?: string | null): number | null {
-  if (!inT || !outT) return null
-  const toM = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m }
-  
-  let outM = toM(outT)
-  const inM = toM(inT)
-  if (outM <= inM) outM += 24 * 60 // handle overnight
-
-  let diff = (outM - inM) / 60
-  
-  if (work_tag && work_tag.includes('permission_')) {
-    const match = work_tag.match(/permission_([0-9:]*)_([0-9:]*)/)
-    if (match && match[1] && match[2]) {
-      let pOut = toM(match[2])
-      const pIn = toM(match[1])
-      if (pOut <= pIn) pOut += 24 * 60
-      
-      const overlapStart = Math.max(inM, pIn)
-      const overlapEnd = Math.min(outM, pOut)
-      if (overlapEnd > overlapStart) {
-        diff -= (overlapEnd - overlapStart) / 60
-      }
-    }
-  }
-
-  return diff > 0 ? diff : null
-}
+import { parsePermissionData, calcPermissionHours, calcHours } from '../../utils/attendanceUtils'
 
 function statusBadgeClass(s: string) {
   if (s === 'Present') return 'badge-present'

@@ -1,81 +1,185 @@
-
-
 export const STANDARD_IN = '10:00'
 export const STANDARD_OUT = '18:30'
+export const STANDARD_IN_MINS = 10 * 60       // 600 mins
+export const STANDARD_OUT_MINS = 18 * 60 + 30 // 1110 mins
+export const REQUIRED_WORK_MINS = 8 * 60 + 30 // 510 mins (8h 30m)
 
-export function toMinutes(t: string): number {
+export interface AttendanceMetrics {
+  workingHours: number | null
+  workingMins: number
+  permissionMins: number
+  permissionHours: number
+  earlyInMins: number
+  lateInMins: number
+  earlyOutMins: number
+  overtimeMins: number
+  isOvernight: boolean
+}
+
+export function toMinutes(t: string | null | undefined): number {
   if (!t) return 0
   const [h, m] = t.split(':').map(Number)
+  if (isNaN(h) || isNaN(m)) return 0
   return h * 60 + m
 }
 
-export function calcHours(inT: string, outT: string, work_tag?: string | null): number | null {
-  if (!inT || !outT) return null
-  let outMins = toMinutes(outT)
-  const inMins = toMinutes(inT)
-  // Handle overnight shift: if checkout is before check-in, assume next day
-  if (outMins <= inMins) outMins += 24 * 60
-  
-  let diff = (outMins - inMins) / 60
-  
-  if (work_tag && work_tag.includes('permission_')) {
-    const match = work_tag.match(/permission_([0-9:]*)_([0-9:]*)/)
-    if (match && match[1] && match[2]) {
-      let pOut = toMinutes(match[2])
-      const pIn = toMinutes(match[1])
-      if (pOut <= pIn) pOut += 24 * 60
-      
-      const overlapStart = Math.max(inMins, pIn)
-      const overlapEnd = Math.min(outMins, pOut)
-      
-      if (overlapEnd > overlapStart) {
-        diff -= (overlapEnd - overlapStart) / 60
-      }
-    }
+export function parsePermissionData(tagStr: string | null | undefined): { start: string, end: string } | null {
+  if (!tagStr) return null
+  const match = tagStr.match(/permission_([0-9]{1,2}:[0-9]{2})_([0-9]{1,2}:[0-9]{2})/)
+  if (match) {
+    return { start: match[1] || '', end: match[2] || '' }
   }
+  return null
+}
 
+export function calcPermissionHours(start: string, end: string): number | null {
+  if (!start || !end) return null
+  let outMins = toMinutes(end)
+  const inMins = toMinutes(start)
+  if (outMins <= inMins) outMins += 24 * 60
+  const diff = (outMins - inMins) / 60
   return diff > 0 ? diff : null
 }
 
-export function getEarlyInMinutes(inT: string): number {
-  if (!inT) return 0
-  const diff = toMinutes(STANDARD_IN) - toMinutes(inT)
-  return diff > 0 ? diff : 0
+export function calcPermissionMinutes(tagStr: string | null | undefined): number {
+  const pData = parsePermissionData(tagStr)
+  if (!pData) return 0
+  const pHrs = calcPermissionHours(pData.start, pData.end)
+  return pHrs ? Math.round(pHrs * 60) : 0
+}
+
+/**
+ * Calculates complete attendance metrics following business rules:
+ * 1. Working Hours = Check Out - Check In (actual worked duration)
+ * 2. Early In = 10:00 AM - Check In (only for normal same-day shifts, 0 for overnight)
+ * 3. Late In = Check In - 10:00 AM (if Check In > 10:00 AM and not covered by permission)
+ * 4. Early Out = 6:30 PM - Check Out (if Check Out < 6:30 PM and not covered by permission)
+ * 5. Overtime = Check Out - 6:30 PM (for normal day shifts) OR Working Hours - Required Hours (for overnight shifts)
+ * 6. Permission: Removes Late In or Early Out if covering missing hours
+ */
+export function getAttendanceMetrics(
+  inT: string | null | undefined,
+  outT: string | null | undefined,
+  work_tag?: string | null
+): AttendanceMetrics {
+  const pMins = calcPermissionMinutes(work_tag)
+  const pHrs = pMins / 60
+
+  if (!inT || !outT) {
+    return {
+      workingHours: null,
+      workingMins: 0,
+      permissionMins: pMins,
+      permissionHours: pHrs,
+      earlyInMins: 0,
+      lateInMins: 0,
+      earlyOutMins: 0,
+      overtimeMins: 0,
+      isOvernight: false,
+    }
+  }
+
+  const inMins = toMinutes(inT)
+  let outMins = toMinutes(outT)
+  const rawCrossMidnight = outMins <= inMins
+
+  if (rawCrossMidnight) {
+    outMins += 24 * 60
+  }
+
+  const workingMins = outMins - inMins
+  const workingHours = workingMins / 60
+
+  // Overnight / Continuous Shift Classification
+  const isOvernight = rawCrossMidnight || (inMins <= 6 * 60 && workingMins > REQUIRED_WORK_MINS)
+
+  if (isOvernight) {
+    return {
+      workingHours,
+      workingMins,
+      permissionMins: pMins,
+      permissionHours: pHrs,
+      earlyInMins: 0,
+      lateInMins: 0,
+      earlyOutMins: 0,
+      overtimeMins: Math.max(0, Math.round(workingMins - REQUIRED_WORK_MINS)),
+      isOvernight: true,
+    }
+  }
+
+  // 1. Early In
+  const earlyInMins = inMins < STANDARD_IN_MINS ? STANDARD_IN_MINS - inMins : 0
+
+  // 2. Late In
+  let lateInMins = 0
+  if (inMins > STANDARD_IN_MINS) {
+    const baseLate = inMins - STANDARD_IN_MINS
+    const pData = parsePermissionData(work_tag)
+    if (pData) {
+      const pStart = toMinutes(pData.start)
+      let pEnd = toMinutes(pData.end)
+      if (pEnd <= pStart) pEnd += 24 * 60
+      const overlap = Math.max(0, Math.min(inMins, pEnd) - Math.max(STANDARD_IN_MINS, pStart))
+      lateInMins = Math.max(0, baseLate - overlap)
+    } else {
+      lateInMins = Math.max(0, baseLate - pMins)
+    }
+  }
+
+  // 3. Early Out
+  let earlyOutMins = 0
+  if (outMins < STANDARD_OUT_MINS) {
+    const baseEarlyOut = STANDARD_OUT_MINS - outMins
+    const pData = parsePermissionData(work_tag)
+    if (pData) {
+      const pStart = toMinutes(pData.start)
+      let pEnd = toMinutes(pData.end)
+      if (pEnd <= pStart) pEnd += 24 * 60
+      const overlap = Math.max(0, Math.min(STANDARD_OUT_MINS, pEnd) - Math.max(outMins, pStart))
+      earlyOutMins = Math.max(0, baseEarlyOut - overlap)
+    } else {
+      earlyOutMins = Math.max(0, baseEarlyOut - pMins)
+    }
+  }
+
+  // 4. Overtime
+  const overtimeMins = outMins > STANDARD_OUT_MINS ? outMins - STANDARD_OUT_MINS : 0
+
+  return {
+    workingHours,
+    workingMins,
+    permissionMins: pMins,
+    permissionHours: pHrs,
+    earlyInMins,
+    lateInMins,
+    earlyOutMins,
+    overtimeMins,
+    isOvernight: false,
+  }
+}
+
+export function calcHours(inT: string, outT: string, work_tag?: string | null): number | null {
+  return getAttendanceMetrics(inT, outT, work_tag).workingHours
+}
+
+export function getEarlyInMinutes(inT: string, outT?: string, work_tag?: string | null): number {
+  return getAttendanceMetrics(inT, outT || STANDARD_OUT, work_tag).earlyInMins
 }
 
 export function getLateInMinutes(inT: string, work_tag?: string | null): number {
-  if (!inT) return 0
-  if (work_tag && work_tag.includes('permission_')) return 0
-  const diff = toMinutes(inT) - toMinutes(STANDARD_IN)
-  return diff > 0 ? diff : 0
+  return getAttendanceMetrics(inT, STANDARD_OUT, work_tag).lateInMins
 }
 
-export function getEarlyOutMinutes(inT: string, outT: string): number {
-  if (!inT || !outT) return 0
-  let outMins = toMinutes(outT)
-  const inMins = toMinutes(inT)
-  if (outMins <= inMins) outMins += 24 * 60
-  const diff = toMinutes(STANDARD_OUT) - outMins
-  return diff > 0 ? diff : 0
+export function getEarlyOutMinutes(inT: string, outT: string, work_tag?: string | null): number {
+  return getAttendanceMetrics(inT, outT, work_tag).earlyOutMins
 }
 
 export function getOvertimeMinutes(inT: string, outT: string, work_tag?: string | null): number {
-  if (!inT || !outT) return 0
-  let outMins = toMinutes(outT)
-  const inMins = toMinutes(inT)
-  if (outMins <= inMins) outMins += 24 * 60
-
-  // Check out must be after 18:30
-  if (outMins <= toMinutes(STANDARD_OUT)) return 0
-
-  const workedHrs = calcHours(inT, outT, work_tag)
-  if (workedHrs === null || workedHrs <= 8.5) return 0
-
-  const otHrs = workedHrs - 8.5
-  return Math.round(otHrs * 60)
+  return getAttendanceMetrics(inT, outT, work_tag).overtimeMins
 }
 
 export function formatMins(mins: number): string {
+  if (mins <= 0) return '—'
   if (mins < 60) return `${mins}m`
   const h = Math.floor(mins / 60)
   const m = mins % 60
@@ -84,32 +188,30 @@ export function formatMins(mins: number): string {
 
 /* Auto-generate tag string: support comma-separated multiple tags */
 export function autoTag(inT: string, outT: string, work_tag?: string | null): string | null {
+  const metrics = getAttendanceMetrics(inT, outT, work_tag)
   const tags: string[] = []
-  if (inT) {
-    if (toMinutes(inT) < toMinutes(STANDARD_IN)) {
-      tags.push('earlycome')
-    } else if (toMinutes(inT) > toMinutes(STANDARD_IN) && (!work_tag || !work_tag.includes('permission_'))) {
-      tags.push('latein')
-    }
-  }
-  if (outT) {
-    const otMins = getOvertimeMinutes(inT, outT, work_tag)
-    if (otMins > 0) {
-      tags.push('overtime')
-    } else if (toMinutes(outT) < toMinutes(STANDARD_OUT)) {
-      tags.push('earlyout')
-    }
-  }
-  return tags.length > 0 ? tags.join(',') : null
-}
 
-export function parsePermissionData(tagStr: string | null): { start: string, end: string } | null {
-  if (!tagStr) return null
-  const match = tagStr.match(/permission_([0-9:]*)_([0-9:]*)/)
-  if (match) {
-    return { start: match[1] || '', end: match[2] || '' }
+  if (metrics.earlyInMins > 0) {
+    tags.push('earlycome')
   }
-  return null
+  if (metrics.lateInMins > 0) {
+    tags.push('latein')
+  }
+  if (metrics.earlyOutMins > 0) {
+    tags.push('earlyout')
+  }
+  if (metrics.overtimeMins > 0) {
+    tags.push('overtime')
+  }
+
+  if (work_tag && work_tag.includes('permission_')) {
+    const pData = parsePermissionData(work_tag)
+    if (pData) {
+      tags.push(`permission_${pData.start}_${pData.end}`)
+    }
+  }
+
+  return tags.length > 0 ? tags.join(',') : null
 }
 
 export function upsertPermission(tagStr: string | null, start: string, end: string): string {
@@ -125,13 +227,4 @@ export function removePermission(tagStr: string | null): string | null {
   if (!tagStr) return null
   const cleaned = tagStr.split(',').filter(t => !t.startsWith('permission_')).join(',')
   return cleaned || null
-}
-
-export function calcPermissionHours(start: string, end: string): number | null {
-  if (!start || !end) return null
-  let outMins = toMinutes(end)
-  const inMins = toMinutes(start)
-  if (outMins <= inMins) outMins += 24 * 60
-  const diff = (outMins - inMins) / 60
-  return diff > 0 ? diff : null
 }
